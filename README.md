@@ -70,7 +70,7 @@ npx agy-skills doctor --json
 - Expands `~` and resolves all relative paths to the operating system's absolute path.
 - Automatically initializes `skills.json` if missing and external skills are detected.
 
-### `agy-skills bridge` (alias: `sync`)
+### `agy-skills bridge`
 - Creates a safe symbolic link from `~/.gemini/config/skills` to `~/.agents/skills`.
 - Safe against accidental directory overwrites (requires `--force` if a real directory exists).
 - Fully supports POSIX symlinks (macOS/Linux) and directory junctions (Windows).
@@ -78,9 +78,14 @@ npx agy-skills doctor --json
 ### `agy-skills install <owner/repo | url | local-path>`
 - Clones or updates upstream Git repository into `~/.gemini/config/plugins/<name>`.
 - Automatically scans multi-tier categories (e.g. `skills/engineering/tdd`) and creates root relative symlinks so Antigravity discovers them.
-- Relocates root `AGENTS.md` to `rules/AGENTS.md`.
+- Copies root `AGENTS.md` to `rules/AGENTS.md` while preserving root `AGENTS.md` to maintain upstream git working tree cleanliness.
 - Generates compliant `plugin.json` manifest.
 - Runs `agy plugin validate` automatically to confirm compliance.
+
+### `agy-skills update [plugin]`
+- Pulls latest upstream git commits for installed plugins.
+- Automatically re-scans multi-tier category skills and re-flattens root symlinks.
+- Re-runs `agy plugin validate` to confirm updated plugins remain fully compliant.
 
 ### `agy-skills list`
 - Lists all discovered standalone global skills and installed Antigravity plugins.
@@ -93,6 +98,7 @@ See our domain documentation and ADRs:
 - [GLOSSARY.md](./GLOSSARY.md): Canonical domain vocabulary (*Skill*, *Customization Root*, *Skill Manifest*, *Plugin Bundle*, *Skill Bridge*, *Doctor*, *Adapter*).
 - [ADR 0001: Architecture and Tech Stack](./docs/adr/0001-architecture-and-tech-stack.md)
 - [ADR 0002: CLI Command Surface & Community Plugin Adaptation](./docs/adr/0002-cli-commands-and-plugin-adaptation.md)
+- [ADR 0003: Code Review Remediations and Git Cleanliness](./docs/adr/0003-code-review-remediations-and-git-cleanliness.md)
 - [Spec 0001: Antigravity Skills CLI](./docs/specs/0001-antigravity-skills-cli.md)
 
 ---

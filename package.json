@@ -1,0 +1,41 @@
+{
+  "name": "antigravity-skills",
+  "version": "0.1.0",
+  "description": "CLI tool to diagnose, bridge, and manage skill discovery and compatibility for Google Antigravity / Gemini CLI",
+  "type": "module",
+  "bin": {
+    "agy-skills": "./dist/bin/cli.js",
+    "antigravity-skills": "./dist/bin/cli.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/bin/cli.js",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "antigravity",
+    "gemini-cli",
+    "skills",
+    "agent-skills",
+    "ai-agents",
+    "claude-code",
+    "cursor"
+  ],
+  "author": "Felix Wang <fxw.xlab@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fxw-labs/antigravity-skills.git"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

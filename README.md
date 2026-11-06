@@ -4,8 +4,10 @@
 > 自动诊断、跨生态桥接并适配 Google Antigravity / Gemini CLI 的技能管理工具。
 
 [![CI](https://github.com/fxw-labs/antigravity-skills/actions/workflows/ci.yml/badge.svg)](https://github.com/fxw-labs/antigravity-skills/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/fxw-labs/antigravity-skills)](https://github.com/fxw-labs/antigravity-skills/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![npm version](https://img.shields.io/npm/v/antigravity-skills.svg)](https://www.npmjs.com/package/antigravity-skills)
+[![GitHub issues](https://img.shields.io/github/issues/fxw-labs/antigravity-skills)](https://github.com/fxw-labs/antigravity-skills/issues)
+[![Node.js Version](https://img.shields.io/node/v/antigravity-skills)](https://nodejs.org)
 
 ---
 
@@ -120,6 +122,47 @@ npm run typecheck
 # Build for distribution
 npm run build
 ```
+
+## 📁 Repository Structure / 仓库工程结构
+
+```text
+antigravity-skills/
+├── .github/
+│   ├── workflows/ci.yml         # Multi-OS (Ubuntu, macOS, Windows) CI matrix
+│   ├── ISSUE_TEMPLATE/          # Structured issue templates (bug, feature)
+│   └── pull_request_template.md # PR verification checklist
+├── docs/
+│   ├── adr/                     # Architecture Decision Records (0001, 0002, 0003)
+│   └── specs/                   # Formal feature specifications (0001)
+├── src/
+│   ├── bin/cli.ts               # CLI executable entrypoint
+│   ├── adapter.ts               # Category directory flattening & rules adapter
+│   ├── bridge.ts                # Cross-agent symlink bridge
+│   ├── cli.ts                   # CLI router and argument parser
+│   ├── doctor.ts                # Environment and manifest diagnostics
+│   ├── env.ts                   # Platform-aware path resolution
+│   ├── fix.ts                   # skills.json path repair & JSONC preservation
+│   ├── install.ts               # Git cloning, adapting, and validating
+│   ├── list.ts                  # Discovery scanner for skills and plugins
+│   ├── update.ts                # Git update and re-adaptation runner
+│   └── types.ts                 # Domain type definitions
+├── test/                        # Vitest unit & integration test suites
+├── CODE_OF_CONDUCT.md           # Contributor Covenant Code of Conduct
+├── CONTRIBUTING.md              # Contributor guide and coding standards
+├── GLOSSARY.md                  # Domain model vocabulary
+├── LICENSE                      # MIT License
+└── SECURITY.md                  # Security and vulnerability reporting policy
+```
+
+---
+
+## 🤝 Community & Contributing
+
+Contributions are welcome! Please check our community guidelines before submitting pull requests:
+- 📖 [Contributing Guide](./CONTRIBUTING.md): Setup, coding rules (zero-runtime dependencies), commit conventions.
+- 📜 [Code of Conduct](./CODE_OF_CONDUCT.md): Contributor Covenant 2.1 standard.
+- 🔒 [Security Policy](./SECURITY.md): Vulnerability reporting procedures.
+- 💬 [GitHub Issues](https://github.com/fxw-labs/antigravity-skills/issues): Bug reports and feature proposals.
 
 ---
 

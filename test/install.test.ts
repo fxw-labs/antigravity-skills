@@ -32,12 +32,12 @@ describe('Community Plugin Adapter & Install', () => {
     const stat = await fs.lstat(linkPath);
     expect(stat.isSymbolicLink()).toBe(true);
 
-    // Verify AGENTS.md was moved to rules/
+    // Verify AGENTS.md was copied to rules/ and original preserved for git tracking
     const rulePath = path.join(pluginDir, 'rules', 'AGENTS.md');
     const ruleContent = await fs.readFile(rulePath, 'utf8');
     expect(ruleContent).toBe('# Agents Rule');
     const rootAgentsExists = await fs.access(path.join(pluginDir, 'AGENTS.md')).then(() => true).catch(() => false);
-    expect(rootAgentsExists).toBe(false);
+    expect(rootAgentsExists).toBe(true);
 
     // Verify plugin.json was generated
     const pluginJsonPath = path.join(pluginDir, 'plugin.json');

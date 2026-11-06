@@ -23,7 +23,8 @@ A zero-install TypeScript CLI utility (`antigravity-skills`, executable as `npx 
 - **Doctor Routine**: Inspects the developer's Customization Root and Skill Manifest, identifying relative path errors, missing directories, permission locks, and orphaned Plugin Bundles.
 - **Automated Fix Routine**: Automatically rewrites relative paths in `skills.json` into valid absolute filesystem paths and provisions missing discovery directories.
 - **Skill Bridge**: Creates a persistent, safe filesystem bridge between `~/.agents/skills/` and Antigravity's global customization space, enabling instant skill sharing across AI tools without file duplication.
-- **Community Adapter**: Clones or updates upstream git skill repositories into Antigravity Plugin Bundles, automatically generates flat symlinks for nested category directories, positions `rules/AGENTS.md`, crafts compliant `plugin.json` manifests, and invokes native validation (`agy plugin validate`).
+- **Community Adapter**: Clones or updates upstream git skill repositories (or adapts local plugin directories) into Antigravity Plugin Bundles, automatically generates flat symlinks for nested category directories, positions `rules/AGENTS.md` without deleting upstream git-tracked files, crafts compliant `plugin.json` manifests (ingesting metadata from `.claude-plugin/plugin.json` when available), and invokes native validation (`agy plugin validate`).
+- **Updater Routine**: `agy-skills update [plugin-name]` pulls the latest git commits for installed plugins and automatically re-executes category flattening and rule positioning.
 
 ## User Stories
 

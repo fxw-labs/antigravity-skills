@@ -4,6 +4,7 @@ import { runDoctor, formatDoctorReport } from './doctor.js';
 import { runFix } from './fix.js';
 import { runBridge } from './bridge.js';
 import { runInstall } from './install.js';
+import { runUpdate } from './update.js';
 import { runList, formatListResult } from './list.js';
 
 export interface CliOptions {
@@ -28,7 +29,8 @@ Commands:
   doctor              Run diagnostics on Antigravity skills and manifests (default)
   fix                 Automatically fix non-absolute paths in skills.json
   bridge              Create a symbolic bridge between ~/.agents/skills and Antigravity
-  install <repo>      Install/adapt a community skill repo (e.g. mattpocock/skills)
+  install <target>    Install/adapt a community skill repo or local path (e.g. mattpocock/skills)
+  update [plugin]     Pull latest git commits and re-adapt installed plugins
   list                List discovered skills and active plugins
 
 Options:
@@ -37,6 +39,10 @@ Options:
   --json              Output results in machine-readable JSON format
   --force             Force action without confirmation
 `;
+}
+
+function stripAnsi(text: string): string {
+  return text.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, '');
 }
 
 function promptYesNo(question: string): Promise<boolean> {
@@ -54,8 +60,13 @@ function promptYesNo(question: string): Promise<boolean> {
 }
 
 export async function runCli(argv: string[], options: CliOptions = {}): Promise<number> {
-  const log = options.stdout || console.log;
-  const errorLog = options.stderr || console.error;
+  const rawLog = options.stdout || console.log;
+  const rawErrorLog = options.stderr || console.error;
+  const shouldStripColor = Boolean(process.env.NO_COLOR && process.env.NO_COLOR.trim() !== '');
+
+  const log = (msg: string) => rawLog(shouldStripColor ? stripAnsi(msg) : msg);
+  const errorLog = (msg: string) => rawErrorLog(shouldStripColor ? stripAnsi(msg) : msg);
+
   const env: Environment = getEnvironment(options.homeDir);
 
   const args = [...argv];
@@ -74,6 +85,21 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
   const isJson = args.includes('--json');
   const force = args.includes('--force');
 
+  // Helper to handle standard command result dispatch
+  const handleResult = (result: { ok: boolean; message?: string }, successExtra?: string) => {
+    if (isJson) {
+      log(JSON.stringify(result, null, 2));
+    } else {
+      if (result.ok) {
+        log(`✔ ${result.message || 'Operation completed successfully.'}`);
+        if (successExtra) log(successExtra);
+      } else {
+        errorLog(`✖ ${result.message || 'Operation failed.'}`);
+      }
+    }
+    return result.ok ? 0 : 1;
+  };
+
   if (firstArg === 'list') {
     const result = await runList(env);
     if (isJson) {
@@ -86,30 +112,24 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
 
   if (firstArg === 'fix') {
     const result = await runFix(env);
-    if (isJson) {
-      log(JSON.stringify(result, null, 2));
-    } else {
-      if (result.ok) {
-        log(`✔ ${result.message}`);
-      } else {
-        errorLog(`✖ ${result.message}`);
-      }
-    }
-    return result.ok ? 0 : 1;
+    return handleResult(result);
   }
 
-  if (firstArg === 'bridge' || firstArg === 'sync') {
-    const result = await runBridge(env, { force });
-    if (isJson) {
-      log(JSON.stringify(result, null, 2));
-    } else {
-      if (result.ok) {
-        log(`✔ ${result.message}`);
-      } else {
-        errorLog(`✖ ${result.message}`);
+  if (firstArg === 'bridge') {
+    let effectiveForce = force;
+    const isInteractive = options.isInteractive ?? (process.stdin.isTTY && !force);
+
+    if (!effectiveForce && isInteractive) {
+      // Check if real dir exists to ask interactive confirmation
+      const stat = await import('node:fs/promises').then((fs) => fs.lstat(env.geminiSkillsDir)).catch(() => null);
+      if (stat && !stat.isSymbolicLink()) {
+        const confirm = await promptYesNo(`Directory ${env.geminiSkillsDir} exists and is not a symlink. Overwrite?`);
+        effectiveForce = confirm;
       }
     }
-    return result.ok ? 0 : 1;
+
+    const result = await runBridge(env, { force: effectiveForce });
+    return handleResult(result);
   }
 
   if (firstArg === 'install') {
@@ -121,19 +141,14 @@ export async function runCli(argv: string[], options: CliOptions = {}): Promise<
     }
 
     const result = await runInstall(repoTarget, env);
-    if (isJson) {
-      log(JSON.stringify(result, null, 2));
-    } else {
-      if (result.ok) {
-        log(`✔ ${result.message}`);
-        if (result.validationOutput) {
-          log(`\nValidation output:\n${result.validationOutput}`);
-        }
-      } else {
-        errorLog(`✖ ${result.message}`);
-      }
-    }
-    return result.ok ? 0 : 1;
+    const extra = result.validationOutput ? `\nValidation output:\n${result.validationOutput}` : undefined;
+    return handleResult(result, extra);
+  }
+
+  if (firstArg === 'update') {
+    const pluginName = args[1];
+    const result = await runUpdate(pluginName, env);
+    return handleResult(result);
   }
 
   if (!firstArg || firstArg === 'doctor') {

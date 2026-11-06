@@ -10,21 +10,27 @@ export interface FixResult {
   message: string;
 }
 
+function stripJsonComments(jsonc: string): string {
+  return jsonc.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (match, group) => {
+    return group ? '' : match;
+  });
+}
+
 export async function runFix(env: Environment): Promise<FixResult> {
-  const exists = await fileExists(env.skillsJsonPath);
+  const exists = await fileExists(env.skillManifestPath);
 
   if (!exists) {
     const agentsDirExists = await fileExists(env.agentsSkillsDir);
     if (agentsDirExists) {
-      await fs.mkdir(env.geminiConfigDir, { recursive: true });
-      const initialConfig = {
+      await fs.mkdir(env.customizationRoot, { recursive: true });
+      const initialManifest = {
         entries: [{ path: env.agentsSkillsDir }],
       };
-      await fs.writeFile(env.skillsJsonPath, JSON.stringify(initialConfig, null, 2), 'utf8');
+      await fs.writeFile(env.skillManifestPath, JSON.stringify(initialManifest, null, 2), 'utf8');
       return {
         ok: true,
         fixedCount: 1,
-        message: `Created ${env.skillsJsonPath} pointing to ${env.agentsSkillsDir}`,
+        message: `Created ${env.skillManifestPath} pointing to ${env.agentsSkillsDir}`,
       };
     }
 
@@ -36,13 +42,16 @@ export async function runFix(env: Environment): Promise<FixResult> {
   }
 
   try {
-    const rawContent = await fs.readFile(env.skillsJsonPath, 'utf8');
-    const parsed = JSON.parse(rawContent);
+    const rawContent = await fs.readFile(env.skillManifestPath, 'utf8');
+    const cleanJson = stripJsonComments(rawContent);
+    const parsed = JSON.parse(cleanJson);
 
-    const backupPath = env.skillsJsonPath + '.bak';
+    const backupPath = env.skillManifestPath + '.bak';
     await fs.writeFile(backupPath, rawContent, 'utf8');
 
     let fixedCount = 0;
+    let updatedContent = rawContent;
+
     if (Array.isArray(parsed.entries)) {
       for (const entry of parsed.entries) {
         if (typeof entry?.path === 'string') {
@@ -53,20 +62,26 @@ export async function runFix(env: Environment): Promise<FixResult> {
           }
 
           if (resolved !== original) {
-            entry.path = resolved;
-            fixedCount++;
+            // Replace exact quoted path in the raw content to preserve comments and layout
+            const escapedOriginal = original.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+            const pathRegex = new RegExp(`("path"\\s*:\\s*)"${escapedOriginal}"`, 'g');
+
+            if (pathRegex.test(updatedContent)) {
+              updatedContent = updatedContent.replace(pathRegex, `$1"${resolved}"`);
+              fixedCount++;
+            }
           }
         }
       }
     }
 
     if (fixedCount > 0) {
-      await fs.writeFile(env.skillsJsonPath, JSON.stringify(parsed, null, 2), 'utf8');
+      await fs.writeFile(env.skillManifestPath, updatedContent, 'utf8');
       return {
         ok: true,
         fixedCount,
         backupPath,
-        message: `Fixed ${fixedCount} path(s) in skills.json (backup saved to ${backupPath}).`,
+        message: `Fixed ${fixedCount} path(s) in skills.json while preserving comments (backup saved to ${backupPath}).`,
       };
     }
 

@@ -46,9 +46,21 @@ describe('Fix Command', () => {
     expect(path.isAbsolute(updatedJson.entries[1].path)).toBe(true);
   });
 
-  it('should initialize skills.json if missing and ~/.agents/skills exists', async () => {
-    const agentsSkillsDir = path.join(tempHome, '.agents', 'skills');
-    await fs.mkdir(agentsSkillsDir, { recursive: true });
+  it('should preserve comments in skills.json when rewriting paths', async () => {
+    const configDir = path.join(tempHome, '.gemini', 'config');
+    await fs.mkdir(configDir, { recursive: true });
+    const contentWithComments = `// Antigravity skills manifest
+{
+  /* Shared team skills */
+  "entries": [
+    {
+      // Personal external skills
+      "path": "~/.agents/skills"
+    }
+  ]
+}
+`;
+    await fs.writeFile(path.join(configDir, 'skills.json'), contentWithComments);
 
     let stdout = '';
     const exitCode = await runCli(['fix'], {
@@ -57,9 +69,10 @@ describe('Fix Command', () => {
     });
 
     expect(exitCode).toBe(0);
-    const configDir = path.join(tempHome, '.gemini', 'config');
-    const createdContent = await fs.readFile(path.join(configDir, 'skills.json'), 'utf8');
-    const createdJson = JSON.parse(createdContent);
-    expect(createdJson.entries[0].path).toBe(agentsSkillsDir);
+    const updated = await fs.readFile(path.join(configDir, 'skills.json'), 'utf8');
+    expect(updated).toContain('// Antigravity skills manifest');
+    expect(updated).toContain('/* Shared team skills */');
+    expect(updated).toContain('// Personal external skills');
+    expect(updated).toContain(path.join(tempHome, '.agents', 'skills'));
   });
 });

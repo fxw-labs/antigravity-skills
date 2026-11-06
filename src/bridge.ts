@@ -13,7 +13,7 @@ export async function runBridge(
   options: { force?: boolean } = {}
 ): Promise<BridgeResult> {
   try {
-    await fs.mkdir(env.geminiConfigDir, { recursive: true });
+    await fs.mkdir(env.customizationRoot, { recursive: true });
     await fs.mkdir(env.agentsSkillsDir, { recursive: true });
 
     let exists = false;
@@ -48,9 +48,12 @@ export async function runBridge(
       }
     }
 
-    // Create relative or absolute symlink. Use 'junction' on Windows for directories.
+    // Windows directory junctions strictly require absolute paths
+    const symlinkTarget = process.platform === 'win32'
+      ? path.resolve(env.agentsSkillsDir)
+      : env.agentsSkillsDir;
     const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
-    await fs.symlink(env.agentsSkillsDir, env.geminiSkillsDir, symlinkType);
+    await fs.symlink(symlinkTarget, env.geminiSkillsDir, symlinkType);
 
     return {
       ok: true,

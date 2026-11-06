@@ -2,11 +2,48 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileExists } from './doctor.js';
 
+export interface NestedSkillItem {
+  categoryName: string;
+  skillName: string;
+  skillMdPath: string;
+  relativeTarget: string;
+}
+
 export interface AdaptResult {
   ok: boolean;
   flattenedSkills: string[];
   rulesMigrated: boolean;
   message?: string;
+}
+
+export async function findNestedSkills(skillsDir: string): Promise<NestedSkillItem[]> {
+  const results: NestedSkillItem[] = [];
+  if (!(await fileExists(skillsDir))) {
+    return results;
+  }
+
+  const categoryEntries = await fs.readdir(skillsDir, { withFileTypes: true }).catch(() => []);
+  for (const categoryEntry of categoryEntries) {
+    if (!categoryEntry.isDirectory()) continue;
+    const categoryPath = path.join(skillsDir, categoryEntry.name);
+
+    const skillEntries = await fs.readdir(categoryPath, { withFileTypes: true }).catch(() => []);
+    for (const skillEntry of skillEntries) {
+      if (!skillEntry.isDirectory()) continue;
+      const skillMdPath = path.join(categoryPath, skillEntry.name, 'SKILL.md');
+
+      if (await fileExists(skillMdPath)) {
+        results.push({
+          categoryName: categoryEntry.name,
+          skillName: skillEntry.name,
+          skillMdPath,
+          relativeTarget: path.join(categoryEntry.name, skillEntry.name),
+        });
+      }
+    }
+  }
+
+  return results;
 }
 
 export async function adaptPluginDirectory(
@@ -18,34 +55,24 @@ export async function adaptPluginDirectory(
 
   try {
     const skillsDir = path.join(pluginDir, 'skills');
-    if (await fileExists(skillsDir)) {
-      const entries = await fs.readdir(skillsDir, { withFileTypes: true });
+    const nestedSkills = await findNestedSkills(skillsDir);
 
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const subPath = path.join(skillsDir, entry.name);
+    for (const item of nestedSkills) {
+      const linkPath = path.join(skillsDir, item.skillName);
+      const linkExists = await fileExists(linkPath);
 
-        const subEntries = await fs.readdir(subPath, { withFileTypes: true }).catch(() => []);
-        for (const sub of subEntries) {
-          if (!sub.isDirectory()) continue;
-          const skillMdPath = path.join(subPath, sub.name, 'SKILL.md');
-
-          if (await fileExists(skillMdPath)) {
-            const linkPath = path.join(skillsDir, sub.name);
-            const linkExists = await fileExists(linkPath);
-
-            if (!linkExists) {
-              const relTarget = path.join(entry.name, sub.name);
-              const symType = process.platform === 'win32' ? 'junction' : 'dir';
-              await fs.symlink(relTarget, linkPath, symType);
-              flattenedSkills.push(sub.name);
-            }
-          }
-        }
+      if (!linkExists) {
+        // Windows directory junctions strictly require absolute paths, while POSIX uses relative paths
+        const symTarget = process.platform === 'win32'
+          ? path.resolve(skillsDir, item.relativeTarget)
+          : item.relativeTarget;
+        const symType = process.platform === 'win32' ? 'junction' : 'dir';
+        await fs.symlink(symTarget, linkPath, symType);
+        flattenedSkills.push(item.skillName);
       }
     }
 
-    // Adapt root AGENTS.md to rules/AGENTS.md
+    // Adapt root AGENTS.md to rules/AGENTS.md without deleting the original git-tracked file
     const rootAgentsMd = path.join(pluginDir, 'AGENTS.md');
     const rulesDir = path.join(pluginDir, 'rules');
     const rulesAgentsMd = path.join(rulesDir, 'AGENTS.md');
@@ -57,7 +84,7 @@ export async function adaptPluginDirectory(
         await fs.writeFile(rulesAgentsMd, content, 'utf8');
         rulesMigrated = true;
       }
-      await fs.rm(rootAgentsMd, { force: true });
+      // Do NOT delete rootAgentsMd to preserve upstream git-tracking cleanliness
     }
 
     // Ensure plugin.json exists

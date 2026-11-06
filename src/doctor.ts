@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Environment } from './env.js';
+import { findNestedSkills } from './adapter.js';
 
 export type CheckStatus = 'pass' | 'warn' | 'fail';
 
@@ -39,11 +40,42 @@ export async function isSymlinkTo(sourcePath: string, targetPath: string): Promi
   }
 }
 
+function stripJsonComments(jsonc: string): string {
+  // Strip single-line comments // and multi-line comments /* */ outside of strings
+  return jsonc.replace(/\\"|"(?:\\"|[^"])*"|(\/\/.*|\/\*[\s\S]*?\*\/)/g, (match, group) => {
+    return group ? '' : match;
+  });
+}
+
 export async function runDoctor(env: Environment): Promise<DoctorReport> {
   const checks: CheckResult[] = [];
 
-  // Check 1: skills.json paths
-  const skillsJsonExists = await fileExists(env.skillsJsonPath);
+  // Check 1: Customization root directory permissions
+  const customizationRootExists = await fileExists(env.customizationRoot);
+  if (customizationRootExists) {
+    try {
+      await fs.access(env.customizationRoot, (fs.constants || { W_OK: 2 }).W_OK);
+      checks.push({
+        id: 'customization-root-permissions',
+        title: 'Customization Root Permissions',
+        status: 'pass',
+        message: 'Antigravity customization root is writable.',
+        fixable: false,
+      });
+    } catch {
+      checks.push({
+        id: 'customization-root-permissions',
+        title: 'Customization Root Permissions',
+        status: 'fail',
+        message: `Customization root ${env.customizationRoot} is not writable (permission locked).`,
+        fixable: false,
+        remedy: `Check directory permissions: chmod u+w ${env.customizationRoot}`,
+      });
+    }
+  }
+
+  // Check 2: skills.json paths
+  const skillsJsonExists = await fileExists(env.skillManifestPath);
   if (!skillsJsonExists) {
     checks.push({
       id: 'skills-json-paths',
@@ -54,8 +86,9 @@ export async function runDoctor(env: Environment): Promise<DoctorReport> {
     });
   } else {
     try {
-      const content = await fs.readFile(env.skillsJsonPath, 'utf8');
-      const parsed = JSON.parse(content);
+      const content = await fs.readFile(env.skillManifestPath, 'utf8');
+      const cleanJson = stripJsonComments(content);
+      const parsed = JSON.parse(cleanJson);
       const invalidEntries: string[] = [];
 
       if (Array.isArray(parsed.entries)) {
@@ -97,7 +130,7 @@ export async function runDoctor(env: Environment): Promise<DoctorReport> {
     }
   }
 
-  // Check 2: Skill Bridge between ~/.agents/skills and ~/.gemini/config/skills
+  // Check 3: Skill Bridge between ~/.agents/skills and ~/.gemini/config/skills
   const agentsSkillsExists = await fileExists(env.agentsSkillsDir);
   if (agentsSkillsExists) {
     const isBridged = await isSymlinkTo(env.geminiSkillsDir, env.agentsSkillsDir);
@@ -132,7 +165,7 @@ export async function runDoctor(env: Environment): Promise<DoctorReport> {
     });
   }
 
-  // Check 3: Plugins Structure & Compatibility
+  // Check 4: Plugins Structure & Compatibility
   const pluginsDirExists = await fileExists(env.geminiPluginsDir);
   if (pluginsDirExists) {
     try {
@@ -143,50 +176,56 @@ export async function runDoctor(env: Environment): Promise<DoctorReport> {
         if (!plugin.isDirectory()) continue;
         const pluginPath = path.join(env.geminiPluginsDir, plugin.name);
         const pluginSkillsDir = path.join(pluginPath, 'skills');
+        const pluginJsonPath = path.join(pluginPath, 'plugin.json');
         const pluginAgentsMd = path.join(pluginPath, 'AGENTS.md');
         const pluginRulesAgentsMd = path.join(pluginPath, 'rules', 'AGENTS.md');
 
-        if (await fileExists(pluginSkillsDir)) {
-          const subdirs = await fs.readdir(pluginSkillsDir, { withFileTypes: true });
-          for (const sub of subdirs) {
-            if (sub.isDirectory()) {
-              const subPath = path.join(pluginSkillsDir, sub.name);
-              // Check if this is a category containing nested skills
-              const nested = await fs.readdir(subPath, { withFileTypes: true }).catch(() => []);
-              for (const n of nested) {
-                if (n.isDirectory()) {
-                  const nestedSkillMd = path.join(subPath, n.name, 'SKILL.md');
-                  if (await fileExists(nestedSkillMd)) {
-                    // It is a nested skill! Check if a flat link exists in pluginSkillsDir
-                    const flatLink = path.join(pluginSkillsDir, n.name);
-                    if (!(await fileExists(flatLink))) {
-                      hasPluginIssues = true;
-                      checks.push({
-                        id: `plugin-${plugin.name}-unflattened`,
-                        title: `Plugin '${plugin.name}' Directory Flattening`,
-                        status: 'warn',
-                        message: `Nested skill '${sub.name}/${n.name}' is not flattened at root skills/. Antigravity cannot discover it.`,
-                        fixable: true,
-                        remedy: `Run \`agy-skills install ${plugin.name}\` or adapt the directory structure.`,
-                      });
-                      break;
-                    }
-                  }
-                }
-              }
+        // Check for orphaned bundles
+        const hasPluginJson = await fileExists(pluginJsonPath);
+        const hasSkillsDir = await fileExists(pluginSkillsDir);
+        if (!hasPluginJson && !hasSkillsDir) {
+          checks.push({
+            id: `plugin-${plugin.name}-orphaned`,
+            title: `Orphaned Plugin '${plugin.name}'`,
+            status: 'warn',
+            message: `Plugin directory '${plugin.name}' lacks plugin.json and contains no skills.`,
+            fixable: false,
+            remedy: `Remove unused folder: rm -rf ${pluginPath}`,
+          });
+          hasPluginIssues = true;
+          continue;
+        }
+
+        // Check multi-tier flattening
+        if (hasSkillsDir) {
+          const nestedSkills = await findNestedSkills(pluginSkillsDir);
+          for (const item of nestedSkills) {
+            const flatLink = path.join(pluginSkillsDir, item.skillName);
+            if (!(await fileExists(flatLink))) {
+              hasPluginIssues = true;
+              checks.push({
+                id: `plugin-${plugin.name}-unflattened`,
+                title: `Plugin '${plugin.name}' Directory Flattening`,
+                status: 'warn',
+                message: `Nested skill '${item.categoryName}/${item.skillName}' is not flattened at root skills/. Antigravity cannot discover it.`,
+                fixable: true,
+                remedy: `Run \`agy-skills install ${plugin.name}\` or adapt the directory structure.`,
+              });
+              break;
             }
           }
         }
 
+        // Only warn about root AGENTS.md if rules/AGENTS.md does NOT exist
         if ((await fileExists(pluginAgentsMd)) && !(await fileExists(pluginRulesAgentsMd))) {
           hasPluginIssues = true;
           checks.push({
             id: `plugin-${plugin.name}-rule-location`,
             title: `Plugin '${plugin.name}' Rule Location`,
             status: 'warn',
-            message: `Root AGENTS.md will not be loaded by Antigravity unless located at rules/AGENTS.md.`,
+            message: `Root AGENTS.md will not be loaded by Antigravity unless duplicated to rules/AGENTS.md.`,
             fixable: true,
-            remedy: 'Move AGENTS.md to rules/AGENTS.md.',
+            remedy: 'Copy AGENTS.md to rules/AGENTS.md.',
           });
         }
       }

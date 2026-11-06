@@ -95,22 +95,25 @@ export async function runInstall(
 
     // Optional: agy plugin validate
     let validationOutput: string | undefined;
+    let validationPassed = true;
     if (options.validate !== false) {
       try {
         const { stdout } = await execFileAsync('agy', ['plugin', 'validate', targetDir]);
         validationOutput = stdout.trim();
-      } catch {
-        // agy CLI might not be in PATH or validate failed, non-blocking
+      } catch (err: any) {
+        validationPassed = false;
+        validationOutput = (err.stdout || err.stderr || err.message || '').trim();
       }
     }
 
+    const valNotice = validationPassed ? '' : ' (Warning: `agy plugin validate` reported issues)';
     return {
       ok: true,
       pluginName: name,
       targetDir,
       adaptResult,
       validationOutput,
-      message: `Installed and adapted plugin '${name}' into ${targetDir}. Flattened ${adaptResult.flattenedSkills.length} skill(s).`,
+      message: `Installed and adapted plugin '${name}' into ${targetDir}.${valNotice} Flattened ${adaptResult.flattenedSkills.length} skill(s).`,
     };
   } catch (err: any) {
     return {

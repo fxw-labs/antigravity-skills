@@ -4,26 +4,33 @@ import path from 'node:path';
 export interface Environment {
   homeDir: string;
   geminiDir: string;
-  geminiConfigDir: string;
-  skillsJsonPath: string;
+  customizationRoot: string;
+  skillManifestPath: string;
   geminiSkillsDir: string;
   geminiPluginsDir: string;
   agentsSkillsDir: string;
+  // Aliases for compatibility
+  geminiConfigDir: string;
+  skillsJsonPath: string;
 }
 
 export function getEnvironment(overrideHomeDir?: string): Environment {
   const homeDir = overrideHomeDir ? path.resolve(overrideHomeDir) : os.homedir();
   const geminiDir = path.join(homeDir, '.gemini');
-  const geminiConfigDir = path.join(geminiDir, 'config');
+  const customizationRoot = path.join(geminiDir, 'config');
+  const skillManifestPath = path.join(customizationRoot, 'skills.json');
 
   return {
     homeDir,
     geminiDir,
-    geminiConfigDir,
-    skillsJsonPath: path.join(geminiConfigDir, 'skills.json'),
-    geminiSkillsDir: path.join(geminiConfigDir, 'skills'),
-    geminiPluginsDir: path.join(geminiConfigDir, 'plugins'),
+    customizationRoot,
+    skillManifestPath,
+    geminiSkillsDir: path.join(customizationRoot, 'skills'),
+    geminiPluginsDir: path.join(customizationRoot, 'plugins'),
     agentsSkillsDir: path.join(homeDir, '.agents', 'skills'),
+    // Aliases
+    geminiConfigDir: customizationRoot,
+    skillsJsonPath: skillManifestPath,
   };
 }
 

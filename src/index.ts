@@ -4,4 +4,6 @@ export * from './fix.js';
 export * from './bridge.js';
 export * from './adapter.js';
 export * from './install.js';
+export * from './update.js';
+export * from './list.js';
 export * from './cli.js';
